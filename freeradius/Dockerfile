@@ -1,4 +1,4 @@
-FROM freeradius/freeradius-server:3.2.10-alpine@sha256:91acbee4a1f532e3a266ae3d7f153a5cf21f5faa9bc14116d5d1fe2c2a746c27
+FROM freeradius/freeradius-server:3.2.11-alpine@sha256:0de028f73b233b64870d2aeaa0da04727778919c75ec430a560df340b724e3ad
 
 ENV PATH="/opt/sbin:${PATH}"
 
