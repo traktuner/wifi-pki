@@ -8,7 +8,7 @@ RUN test -z "$(gofmt -l .)" && go test ./...
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath -ldflags="-s -w -buildid=" -o /out/wifi-enrollment .
 
-FROM alpine:3.22.4@sha256:2039be0c5ec6ce8566809626a252c930216a92109c043f282504accb5ee3c0c6
+FROM alpine:3.24.4@sha256:0f49f331d9212aff11b932863be4eb01cdf962969aa86dab7d1ee21ac6f5f52b
 RUN apk add --no-cache ca-certificates openssl \
     && addgroup -g 65532 -S nonroot \
     && adduser -u 65532 -S -D -H -G nonroot nonroot
