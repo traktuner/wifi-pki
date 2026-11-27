@@ -1,0 +1,38 @@
+eap {
+    default_eap_type = tls
+    timer_expire = 60
+    ignore_unknown_eap_types = no
+    max_sessions = 128
+
+    tls-config tls-oncloud {
+        private_key_file = /opt/etc/raddb/certs/oncloud/radius.key
+        certificate_file = /opt/etc/raddb/certs/oncloud/radius.crt
+        ca_file = /opt/etc/raddb/certs/oncloud-trust/root_ca.crt
+        ca_path = /opt/etc/raddb/certs/oncloud-trust
+        private_key_password = ""
+        random_file = /dev/urandom
+        fragment_size = 1200
+        include_length = yes
+        auto_chain = yes
+        check_crl = yes
+        # The offline root is the trust anchor and does not publish an online
+        # CRL. The issuing CA's CRL is mandatory for every client leaf.
+        check_all_crl = no
+        allow_expired_crl = no
+        # FreeRADIUS does not reload an atomically replaced CRL on SIGHUP when
+        # no configuration file changed. Refresh the OpenSSL trust store on
+        # the documented minimum interval instead.
+        ca_path_reload_interval = 300
+        reject_unknown_intermediate_ca = yes
+        check_cert_issuer = "/CN=OnCloud WiFi Issuing CA"
+        cipher_list = "DEFAULT@SECLEVEL=2"
+        cipher_server_preference = yes
+        tls_min_version = "1.2"
+        tls_max_version = "1.2"
+        virtual_server = check-eap-tls
+    }
+
+    tls {
+        tls = tls-oncloud
+    }
+}

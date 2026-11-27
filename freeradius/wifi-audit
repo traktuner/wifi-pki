@@ -1,0 +1,15 @@
+# Structured, secret-free events go to container stdout and therefore GELF.
+linelog wifi_accept {
+    filename = /dev/stdout
+    format = "event=radius_auth result=accept nas=%{Client-Shortname} station=%{%{Calling-Station-Id}:-unknown} serial=%{%{TLS-Client-Cert-Serial}:-unknown} device_uri=%{%{TLS-Client-Cert-Subject-Alt-Name-Uri}:-unknown}"
+}
+
+linelog wifi_reject {
+    filename = /dev/stdout
+    format = "event=radius_auth result=reject nas=%{Client-Shortname} station=%{%{Calling-Station-Id}:-unknown} reason=%{%{Module-Failure-Message}:-eap_tls_policy_or_certificate}"
+}
+
+linelog wifi_accounting {
+    filename = /dev/stdout
+    format = "event=radius_accounting nas=%{Client-Shortname} station=%{%{Calling-Station-Id}:-unknown} status=%{%{Acct-Status-Type}:-unknown} session=%{%{Acct-Session-Id}:-unknown}"
+}

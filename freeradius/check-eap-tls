@@ -1,0 +1,52 @@
+# Runs only after OpenSSL has validated the client chain, time, key usage and
+# every CRL in the chain. The policy narrows the accepted leaf further.
+server check-eap-tls {
+    authorize {
+        if (&TLS-Client-Cert-Issuer !~ /CN=OnCloud WiFi Issuing CA/) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_unexpected_issuer"
+            }
+            reject
+        }
+        if (!&TLS-Client-Cert-Subject-Alt-Name-Uri) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_missing_device_uri"
+            }
+            reject
+        }
+        if (&TLS-Client-Cert-Subject-Alt-Name-Uri !~ /^urn:oncloud:wifi-device:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_invalid_device_uri"
+            }
+            reject
+        }
+        if (!&TLS-Client-Cert-X509v3-Extended-Key-Usage-OID) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_missing_eku"
+            }
+            reject
+        }
+        if (&TLS-Client-Cert-X509v3-Extended-Key-Usage-OID !~ /1\.3\.6\.1\.5\.5\.7\.3\.2/) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_client_auth_required"
+            }
+            reject
+        }
+        if (&TLS-Client-Cert-X509v3-Extended-Key-Usage-OID =~ /1\.3\.6\.1\.5\.5\.7\.3\.1/) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_server_auth_forbidden"
+            }
+            reject
+        }
+        if (&TLS-Client-Cert-Common-Name !~ /^wifi-[0-9a-f]{12}-[0-9a-f-]{36}$/) {
+            update request {
+                &Module-Failure-Message := "wifi_tls_invalid_common_name"
+            }
+            reject
+        }
+        update control {
+            Auth-Type := Accept
+        }
+        accept
+    }
+}

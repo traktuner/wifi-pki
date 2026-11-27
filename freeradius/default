@@ -1,0 +1,42 @@
+server default {
+    listen {
+        type = auth
+        ipaddr = *
+        port = 1812
+    }
+    listen {
+        type = acct
+        ipaddr = *
+        port = 1813
+    }
+
+    authorize {
+        filter_username
+        eap {
+            ok = return
+            # Subsequent EAP-TLS fragments return "updated" from authorize.
+            # Return here so they reach Auth-Type EAP instead of the
+            # password-fallback guard below.
+            updated = return
+        }
+        reject
+    }
+
+    authenticate {
+        Auth-Type EAP {
+            eap
+        }
+    }
+
+    accounting {
+        wifi_accounting
+    }
+
+    post-auth {
+        wifi_accept
+        Post-Auth-Type REJECT {
+            wifi_reject
+            attr_filter.access_reject
+        }
+    }
+}

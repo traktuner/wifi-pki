@@ -1,0 +1,157 @@
+package main
+
+import (
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type config struct {
+	PublicBaseURL, ListenAddr                         string
+	WebhookListenAddr, WebhookTLSCert, WebhookTLSKey  string
+	OIDCIssuer, OIDCClientID, OIDCRedirectURL         string
+	OIDCRequiredRole, SSID, OnboardingSSID            string
+	EncryptionType                                    string
+	RadiusServerName, SCEPURL, SCEPProvisionerName    string
+	StepCAInternalURL, StepCAServerName               string
+	SCEPWebhookID, DBPath, RootCAPath, IntermediateCA string
+	SigningCert, SigningKey, SigningPasswordFile      string
+	OIDCClientSecret, SessionSecret, WebhookSecret    []byte
+	Hidden, AllowUnsigned                             bool
+	ChallengeTTL, RetryWindow, SessionTTL             time.Duration
+	MaxEnrollmentsPerDay                              int
+}
+
+func loadConfig() (config, error) {
+	var c config
+	c.PublicBaseURL = env("PUBLIC_BASE_URL", "")
+	c.ListenAddr = env("LISTEN_ADDR", ":8080")
+	c.WebhookListenAddr = env("WEBHOOK_LISTEN_ADDR", ":8443")
+	c.WebhookTLSCert = env("WEBHOOK_TLS_CERT_FILE", "")
+	c.WebhookTLSKey = env("WEBHOOK_TLS_KEY_FILE", "")
+	c.OIDCIssuer = env("OIDC_ISSUER", "")
+	c.OIDCClientID = env("OIDC_CLIENT_ID", "wifi-enrollment")
+	c.OIDCRedirectURL = env("OIDC_REDIRECT_URL", "")
+	c.OIDCRequiredRole = env("OIDC_REQUIRED_ROLE", "wifi-enroll")
+	c.SSID = env("SSID", "")
+	c.OnboardingSSID = env("ONBOARDING_SSID", "")
+	c.EncryptionType = env("WIFI_ENCRYPTION_TYPE", "")
+	c.RadiusServerName = env("RADIUS_SERVER_NAME", "radius.example.org")
+	c.SCEPURL = env("SCEP_URL", "")
+	c.StepCAInternalURL = env("STEP_CA_INTERNAL_URL", "")
+	c.StepCAServerName = env("STEP_CA_SERVER_NAME", "")
+	c.SCEPProvisionerName = env("SCEP_PROVISIONER_NAME", "wifi-device")
+	c.SCEPWebhookID = env("SCEP_WEBHOOK_ID", "")
+	c.DBPath = env("DB_PATH", "/data/enrollment.sqlite")
+	c.RootCAPath = env("ROOT_CA_PATH", "/pki/root_ca.crt")
+	c.IntermediateCA = env("INTERMEDIATE_CA_PATH", "/pki/intermediate_ca.crt")
+	c.SigningCert = env("PROFILE_SIGNING_CERT_FILE", "")
+	c.SigningKey = env("PROFILE_SIGNING_KEY_FILE", "")
+	c.SigningPasswordFile = env("PROFILE_SIGNING_PASSWORD_FILE", "")
+	c.Hidden = envBool("WIFI_HIDDEN", false)
+	c.AllowUnsigned = envBool("ALLOW_UNSIGNED_PROFILES", false)
+	c.ChallengeTTL = envDuration("CHALLENGE_TTL", 10*time.Minute)
+	c.RetryWindow = envDuration("SCEP_RETRY_WINDOW", 2*time.Minute)
+	c.SessionTTL = envDuration("SESSION_TTL", 30*time.Minute)
+	c.MaxEnrollmentsPerDay = envInt("MAX_ENROLLMENTS_PER_USER_DAY", 5)
+	var err error
+	if c.OIDCClientSecret, err = readSecret("OIDC_CLIENT_SECRET_FILE"); err != nil {
+		return c, err
+	}
+	if c.SessionSecret, err = readSecret("SESSION_SECRET_FILE"); err != nil {
+		return c, err
+	}
+	var encodedWebhookSecret []byte
+	if encodedWebhookSecret, err = readSecret("STEPCA_WEBHOOK_SECRET_FILE"); err != nil {
+		return c, err
+	}
+	if c.WebhookSecret, err = decodeWebhookSigningSecret(encodedWebhookSecret); err != nil {
+		return c, err
+	}
+	if len(c.SessionSecret) < 32 || len(c.WebhookSecret) < 32 {
+		return c, errors.New("session and webhook secrets must each contain at least 32 bytes")
+	}
+	required := map[string]string{
+		"PUBLIC_BASE_URL": c.PublicBaseURL, "OIDC_ISSUER": c.OIDCIssuer,
+		"OIDC_REDIRECT_URL": c.OIDCRedirectURL, "SSID": c.SSID,
+		"ONBOARDING_SSID":      c.OnboardingSSID,
+		"WIFI_ENCRYPTION_TYPE": c.EncryptionType, "SCEP_URL": c.SCEPURL,
+		"SCEP_WEBHOOK_ID": c.SCEPWebhookID, "STEP_CA_INTERNAL_URL": c.StepCAInternalURL,
+		"STEP_CA_SERVER_NAME":   c.StepCAServerName,
+		"WEBHOOK_TLS_CERT_FILE": c.WebhookTLSCert, "WEBHOOK_TLS_KEY_FILE": c.WebhookTLSKey,
+	}
+	for name, value := range required {
+		if strings.TrimSpace(value) == "" {
+			return c, fmt.Errorf("%s is required", name)
+		}
+	}
+	if c.EncryptionType != "WPA2" && c.EncryptionType != "WPA3" {
+		return c, errors.New("WIFI_ENCRYPTION_TYPE must be WPA2 or WPA3")
+	}
+	if c.ChallengeTTL <= 0 || c.ChallengeTTL > 10*time.Minute {
+		return c, errors.New("CHALLENGE_TTL must be positive and at most 10 minutes")
+	}
+	if c.RetryWindow <= 0 || c.RetryWindow > 2*time.Minute {
+		return c, errors.New("SCEP_RETRY_WINDOW must be positive and at most 2 minutes")
+	}
+	return c, nil
+}
+
+func readSecret(envName string) ([]byte, error) {
+	path := os.Getenv(envName)
+	if path == "" {
+		return nil, fmt.Errorf("%s is required", envName)
+	}
+	value, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", envName, err)
+	}
+	value = []byte(strings.TrimSpace(string(value)))
+	if len(value) == 0 {
+		return nil, fmt.Errorf("%s is empty", envName)
+	}
+	return value, nil
+}
+
+func decodeWebhookSigningSecret(encoded []byte) ([]byte, error) {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
+	if err != nil {
+		return nil, errors.New("STEPCA_WEBHOOK_SECRET_FILE must contain the Base64 signing secret generated by step-ca")
+	}
+	if len(decoded) < 32 {
+		return nil, errors.New("STEPCA_WEBHOOK_SECRET_FILE must decode to at least 32 bytes")
+	}
+	return decoded, nil
+}
+
+func env(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+func envBool(name string, fallback bool) bool {
+	v, err := strconv.ParseBool(env(name, strconv.FormatBool(fallback)))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+func envInt(name string, fallback int) int {
+	v, err := strconv.Atoi(env(name, strconv.Itoa(fallback)))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+func envDuration(name string, fallback time.Duration) time.Duration {
+	v, err := time.ParseDuration(env(name, fallback.String()))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
