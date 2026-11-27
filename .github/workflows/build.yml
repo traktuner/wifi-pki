@@ -30,7 +30,7 @@ jobs:
         include:
           # The tag is the version of the component; bump it with every change of the build context.
           - {name: wifi-enrollment, context: enrollment, tag: "1.1.5"}
-          - {name: wifi-freeradius, context: freeradius, tag: "3.2.10-r4"}
+          - {name: wifi-freeradius, context: freeradius, tag: "3.2.10-r5"}
           - {name: wifi-step-ca, context: step-ca, tag: "0.30.2-unprivileged"}
     steps:
       - uses: actions/checkout@v4
